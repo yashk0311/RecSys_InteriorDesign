@@ -3,7 +3,7 @@ import torch.nn as nn
 
 # The Generator model
 class Generator(nn.Module):
-    def __init__(self, channels, noise_dim=100, embed_dim=256, embed_out_dim=128):
+    def __init__(self, channels, noise_dim=100, embed_dim=114688, embed_out_dim=128):
         super(Generator, self).__init__()
         self.channels = channels
         self.noise_dim = noise_dim
@@ -11,6 +11,7 @@ class Generator(nn.Module):
         self.embed_out_dim = embed_out_dim
 
         # Text embedding layers
+        # print('hi')
         self.text_embedding = nn.Sequential(
             nn.Linear(self.embed_dim, self.embed_out_dim),
             nn.BatchNorm1d(self.embed_out_dim),
@@ -19,7 +20,8 @@ class Generator(nn.Module):
 
         # Generator architecture
         model = []
-        model += self._create_layer(self.noise_dim + self.embed_out_dim, 512, 4, stride=1, padding=0)
+        # model += self._create_layer(self.noise_dim + self.embed_out_dim, 512, 4, stride=1, padding=0)
+        model += self._create_layer(384, 512, 4, stride=1, padding=0)
         model += self._create_layer(512, 256, 4, stride=2, padding=1)
         model += self._create_layer(256, 128, 4, stride=2, padding=1)
         model += self._create_layer(128, 64, 4, stride=2, padding=1)
@@ -36,10 +38,22 @@ class Generator(nn.Module):
         return layers
 
     def forward(self, noise, text):
-        # Apply text embedding to the input text
+    # Flatten the text tensor and apply text embedding
+        print("Here")
+        text = text.view(text.shape[0], -1)
+        print("Here")
+        print(text.shape)
         text = self.text_embedding(text)
-        text = text.view(text.shape[0], text.shape[1], 1, 1)  # Reshape to match the generator input size
+        print("Here")
+        print(text.shape)
+        # text = text.view(text.shape[0], text.shape[1], 1, 1)  # Reshape to match the generator input size
+        # print("Here")
+        # print(text.shape)
+        print(noise.shape)
         z = torch.cat([text, noise], 1)  # Concatenate text embedding with noise
+        print(z.shape)
+        z = z.view(z.shape[0], z.shape[1], 1, 1)
+        print(z.shape)
         return self.model(z)
 
 
@@ -70,10 +84,10 @@ class Discriminator(nn.Module):
 
         # Discriminator architecture
         self.model = nn.Sequential(
-            *self._create_layer(self.channels, 64, 4, 2, 1, normalize=False),
-            *self._create_layer(64, 128, 4, 2, 1),
-            *self._create_layer(128, 256, 4, 2, 1),
-            *self._create_layer(256, 512, 4, 2, 1)
+            *self._create_layer(self.channels, 64, 4, 2, normalize=False),
+            *self._create_layer(64, 128, 4, 2),
+            *self._create_layer(128, 256, 4, 2),
+            *self._create_layer(256, 512, 4, 2)
         )
         self.text_embedding = Embedding(self.embed_dim, self.embed_out_dim)  # Text embedding module
         self.output = nn.Sequential(
@@ -89,6 +103,7 @@ class Discriminator(nn.Module):
 
     def forward(self, x, text):
         x_out = self.model(x)  # Extract features from the input using the discriminator architecture
+        print("No problem w x")
         out = self.text_embedding(x_out, text)  # Apply text embedding and concatenate with the input features
         out = self.output(out)  # Final discriminator output
         return out.squeeze(), x_out
