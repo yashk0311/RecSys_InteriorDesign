@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
+from torch.nn.functional import interpolate
 
 # The Generator model
 class Generator(nn.Module):
-    def __init__(self, channels, noise_dim=100, embed_dim=114688, embed_out_dim=128):
+    def __init__(self, channels, noise_dim=100, embed_dim=114688, embed_out_dim=256):
         super(Generator, self).__init__()
         self.channels = channels
         self.noise_dim = noise_dim
@@ -39,39 +40,33 @@ class Generator(nn.Module):
 
     def forward(self, noise, text):
     # Flatten the text tensor and apply text embedding
-        print("Here")
         text = text.view(text.shape[0], -1)
-        print("Here")
-        print(text.shape)
         text = self.text_embedding(text)
-        print("Here")
-        print(text.shape)
-        # text = text.view(text.shape[0], text.shape[1], 1, 1)  # Reshape to match the generator input size
-        # print("Here")
-        # print(text.shape)
-        print(noise.shape)
+        print(f'text shape: {text.shape} in Generator')
+        print(f'Noise shape: {noise.shape} in Generator')
         z = torch.cat([text, noise], 1)  # Concatenate text embedding with noise
-        print(z.shape)
         z = z.view(z.shape[0], z.shape[1], 1, 1)
-        print(z.shape)
+        print(f'z shape: {z.shape} in Generator')
         return self.model(z)
 
 
 # The Embedding model
 class Embedding(nn.Module):
-    def __init__(self, size_in=256, size_out=128):
+    def __init__(self, embed_dim, out_dim):
         super(Embedding, self).__init__()
-        self.text_embedding = nn.Sequential(
-            nn.Linear(size_in, size_out),
-            nn.BatchNorm1d(size_out),
-            nn.LeakyReLU(0.2, inplace=True)
-        )
+        self.embed_dim = embed_dim
+        self.out_dim = out_dim
+        self.linear = nn.Linear(self.embed_dim, self.out_dim)
 
     def forward(self, x, text):
-        embed_out = self.text_embedding(text)
-        embed_out_resize = embed_out.repeat(4, 4, 1, 1).permute(2, 3, 0, 1)  # Resize to match the discriminator input size
-        out = torch.cat([x, embed_out_resize], 1)  # Concatenate text embedding with the input feature map
-        return out
+        print(f'text shape: {text.shape} in Embedding before reshape')
+        text = text.reshape(-1, self.embed_dim)  # Reshape the text embeddings
+        print(f'text shape: {text.shape} in Embedding')
+        print(f'x shape: {x.shape} in Embedding')
+        out = self.linear(text)  # Apply the linear transformation
+        out = out.reshape(x.size(0), -1, 1, 1)  # Reshape the output to match the input
+        out = out.repeat(1, 1, x.size(2), x.size(2))  # Repeat the output to match the input size
+        return torch.cat([x, out], 1)  # Concatenate the output with the input
 
 
 # The Discriminator model
@@ -87,23 +82,29 @@ class Discriminator(nn.Module):
             *self._create_layer(self.channels, 64, 4, 2, normalize=False),
             *self._create_layer(64, 128, 4, 2),
             *self._create_layer(128, 256, 4, 2),
-            *self._create_layer(256, 512, 4, 2)
+            *self._create_layer(256, 256, 4, 2)
         )
+
         self.text_embedding = Embedding(self.embed_dim, self.embed_out_dim)  # Text embedding module
+
+        # Adjust the number of input channels here
         self.output = nn.Sequential(
-            nn.Conv2d(512 + self.embed_out_dim, 1, 4, 1, 0, bias=False), nn.Sigmoid()
+            nn.Conv2d(256 + self.embed_out_dim, 1, 4, 1, 0, bias=False), 
+            nn.Sigmoid()
         )
 
     def _create_layer(self, size_in, size_out, kernel_size=4, stride=2, padding=1, normalize=True):
         layers = [nn.Conv2d(size_in, size_out, kernel_size=kernel_size, stride=stride, padding=padding)]
         if normalize:
-            layers.append(nn.BatchNorm2d(size_out))
+            layers.append(nn.InstanceNorm2d(size_out, track_running_stats=False))
         layers.append(nn.LeakyReLU(0.2, inplace=True))
         return layers
 
     def forward(self, x, text):
+        text = text.reshape(x.size(0), -1)
         x_out = self.model(x)  # Extract features from the input using the discriminator architecture
         print("No problem w x")
         out = self.text_embedding(x_out, text)  # Apply text embedding and concatenate with the input features
+        print(f'out shape: {out.shape} in Discriminator')
         out = self.output(out)  # Final discriminator output
         return out.squeeze(), x_out

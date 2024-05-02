@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 from pytorch_pretrained_bert.tokenization import BertTokenizer
+from pytorch_pretrained_bert.modeling import BertModel
 import re
 import os
 
@@ -21,14 +22,16 @@ def get_data_from_csv(path):
 class AttDesDataset(data.Dataset):
     def __init__(self, data_root, dataset_name, dataset_split='train', transform=None,
                  bert_model='bert-base-chinese',
-                 des_len=256, obj_len=8, tgt_len=32
+                 des_len=100, obj_len=8, tgt_len=32
                  ):
         self.images = []
         self.descriptions = []
         self.data_root = data_root
         self.dataset_name = dataset_name
         self.transform = transform
-        self.img_root = r'data_files\small'
+        self.img_root = r'data_files\small1'
+        self.bert_model_name = bert_model
+        self.bert_model = BertModel.from_pretrained(bert_model)
         self.tokenizer = BertTokenizer.from_pretrained(bert_model)
         self.des_len = des_len
         self.obj_len = obj_len
@@ -42,7 +45,25 @@ class AttDesDataset(data.Dataset):
             self.images.append(self.get_img_from_id(i))
 
         for i in self.des_list:
-            self.descriptions.append(self.encode_text_bert(i))
+            # Encode the text to get token IDs
+            input_ids = self.encode_text_bert(i)
+
+            # Convert to tensor and add batch dimension
+            input_ids = torch.tensor(input_ids).unsqueeze(0)
+
+            # Get BERT outputs
+            with torch.no_grad():
+                
+                input_ids = torch.tensor(input_ids)
+                # print(type(input_ids))
+                outputs = self.bert_model(input_ids)
+            
+            output_tensor = outputs[0]
+            # Get the vector of the [CLS] token (first token)
+            cls_vector = output_tensor[0][0][:]
+
+            # Append to the list
+            self.descriptions.append(cls_vector)
             
         self.data_csv = pd.read_csv(data_root, encoding='utf-8')
 
@@ -58,6 +79,8 @@ class AttDesDataset(data.Dataset):
         img_filename = self.img_root
         img_filename = os.path.join(self.img_root, str(img_id) + '.jpg')
         img = Image.open(img_filename)
+        # if img_id == 550981:
+        #     print(f'image shape before transformation: {img.size}')
         if self.transform:
             img = self.transform(img)
         return img
@@ -68,6 +91,13 @@ class AttDesDataset(data.Dataset):
         tokens.extend(token_obj)
         tokens.append("[SEP]")
         tokens = self.tokenizer.convert_tokens_to_ids(tokens)
+
+        # Pad or truncate to the desired length
+        if len(tokens) < self.des_len:
+            tokens += [0] * (self.des_len - len(tokens))  # Pad with zeros
+        else:
+            tokens = tokens[:self.des_len]  # Truncate to the maximum length
+
         return tokens
 
     def get_all_from_id(self, img_id, obj_given):
