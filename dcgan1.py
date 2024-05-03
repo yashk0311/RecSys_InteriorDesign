@@ -20,7 +20,9 @@ class Generator(nn.Module):
         # Generator architecture
         model = []
         # model += self._create_layer(self.noise_dim + self.embed_out_dim, 512, 4, stride=1, padding=0)
-        model += self._create_layer(10100, 256, 4, stride=2, padding=1)
+        model += self._create_layer(10100, 4096, 4, stride=2, padding=1)
+        model += self._create_layer(4096, 512, 4, stride=2, padding=1)
+        model += self._create_layer(512, 256, 4, stride=2, padding=1)
         model += self._create_layer(256, 128, 4, stride=2, padding=1)
         model += self._create_layer(128, 64, 4, stride=2, padding=1)
         model += self._create_layer(64, self.channels, 4, stride=2, padding=1, output=True)
