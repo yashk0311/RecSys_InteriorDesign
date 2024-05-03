@@ -46,7 +46,6 @@ class Generator(nn.Module):
         # print(f'noise shape: {noise.shape}')
         z = torch.cat([text, noise], 1)  # Concatenate text embedding with noise
         # print(f'z shape: {z.shape}')
-
         return self.model(z)
 
 
@@ -63,7 +62,7 @@ class Embedding(nn.Module):
     def forward(self, x, text):
         embed_out = self.text_embedding(text)
         # print(f'embed_out shape: {embed_out.shape}')
-        embed_out = embed_out.view(2, 100, 10, 10) 
+        embed_out = embed_out.view(embed_out.shape[0], 100, 10, 10) 
         # print(f'embed_out shape after view: {embed_out.shape}')
 
         # Define the convolutional layer
