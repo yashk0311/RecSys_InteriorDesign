@@ -20,14 +20,14 @@ class Generator(nn.Module):
         # Generator architecture
         model = []
         # model += self._create_layer(self.noise_dim + self.embed_out_dim, 512, 4, stride=1, padding=0)
-        model += self._create_layer(10100, 4096, 4, stride=2, padding=1)
-        model += self._create_layer(4096, 512, 4, stride=2, padding=1)
-        model += self._create_layer(512, 256, 4, stride=2, padding=1)
-        model += self._create_layer(256, 128, 4, stride=2, padding=1)
-        model += self._create_layer(128, 64, 4, stride=2, padding=1)
-        model += self._create_layer(64, self.channels, 4, stride=2, padding=1, output=True)
+        model += self._create_layer(10100, 256, 4, stride=1, padding=1)
+        # model += self._create_layer(512, 256, 4, stride=2, padding=1)
+        model += self._create_layer(256, 128, 4, stride=1, padding=1)
+        model += self._create_layer(128, 64, 4, stride=1, padding=1)
+        model += self._create_layer(64, self.channels, 4, stride=1, padding=1, output=True)
 
         self.model = nn.Sequential(*model)
+        self.upsample = nn.Upsample((256, 256), mode='bilinear', align_corners=False)
 
     def _create_layer(self, size_in, size_out, kernel_size=4, stride=2, padding=1, output=False):
         layers = [nn.ConvTranspose2d(size_in, size_out, kernel_size, stride=stride, padding=padding, bias=False)]
@@ -48,7 +48,10 @@ class Generator(nn.Module):
         # print(f'noise shape: {noise.shape}')
         z = torch.cat([text, noise], 1)  # Concatenate text embedding with noise
         # print(f'z shape: {z.shape}')
-        return self.model(z)
+        img = self.model(z)
+        img = self.upsample(img)
+
+        return img
 
 
 # The Embedding model
